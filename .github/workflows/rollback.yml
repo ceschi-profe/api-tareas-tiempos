@@ -34,4 +34,15 @@ jobs:
           API_TOKEN: ${{ secrets.API_TOKEN }}
         run: docker run -d --name api -p 8080:8000 -e APP_ENV -e API_TOKEN "$IMAGEN"
       - name: Smoke test
+        env:
+          VERSION_ESPERADA: ${{ inputs.sha }}
         run: bash scripts/smoke.sh http://localhost:8080
+      - name: Guardar logs del contenedor
+        if: always()
+        run: docker logs api > logs-rollback.txt 2>&1 || echo "sin contenedor" > logs-rollback.txt
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-rollback
+          path: logs-rollback.txt
