@@ -116,3 +116,14 @@ def test_config_desde_entorno(monkeypatch):
 def test_config_token_vacio_equivale_a_sin_token(monkeypatch):
     monkeypatch.setenv("API_TOKEN", "")
     assert Config.desde_entorno().api_token is None
+
+
+def test_marcar_tarea_como_hecha(cliente):
+    cliente.post("/tareas", json={"titulo": "Revisar el pipeline"})
+    respuesta = cliente.patch("/tareas/1")
+    assert respuesta.status_code == 200
+    assert respuesta.get_json()["hecha"] is True
+def test_marcar_tarea_inexistente(cliente):
+    assert cliente.patch("/tareas/99").status_code == 404
+def test_marcar_hecha_exige_token(cliente_con_token):
+    assert cliente_con_token.patch("/tareas/1").status_code == 401

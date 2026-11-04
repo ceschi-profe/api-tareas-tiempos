@@ -64,4 +64,13 @@ def create_app(config=None):
             return jsonify(error=str(error)), 400
         return jsonify(tarea), 201
 
+    @app.patch("/tareas/<int:tarea_id>")
+    def marcar_hecha(tarea_id):
+        if not autorizado():
+            return jsonify(error="No autorizado"), 401
+        tarea = almacen.marcar_hecha(tarea_id)
+        if tarea is None:
+            return jsonify(error="Tarea no encontrada"), 404
+        return jsonify(tarea)
+
     return app
