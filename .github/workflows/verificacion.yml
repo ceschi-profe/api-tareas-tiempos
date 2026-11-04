@@ -1,0 +1,67 @@
+name: Verificación programada
+# Monitoreo básico: de lunes a viernes, y a pedido, arranca la imagen del último commit de main
+# con la configuración de staging, espera el health check y corre el smoke test.
+# Una ejecución en rojo es la alerta: GitHub notifica a quien modificó por última vez la línea
+# cron de este archivo.
+on:
+  schedule:
+    - cron: "0 12 * * 1-5" # 12:00 UTC, 6:00 a.m. en Costa Rica
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verificar:
+    name: Verificar disponibilidad
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Iniciar sesión en GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Arrancar la imagen del último commit de main
+        env:
+          APP_ENV: ${{ vars.APP_ENV || 'staging' }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          IMAGEN="ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}"
+          echo "IMAGEN=$IMAGEN" >> "$GITHUB_ENV"
+          docker run -d --name api -p 8080:8000 -e APP_ENV -e API_TOKEN "$IMAGEN"
+      - name: Esperar health check del contenedor
+        run: |
+          for intento in $(seq 1 30); do
+            estado=$(docker inspect -f '{{.State.Health.Status}}' api)
+            echo "intento $intento: $estado"
+            [ "$estado" = "healthy" ] && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Smoke test
+        env:
+          VERSION_ESPERADA: ${{ github.sha }}
+        run: bash scripts/smoke.sh http://localhost:8080
+      - name: Guardar logs del contenedor
+        if: always()
+        run: docker logs api > logs-verificacion.txt 2>&1 || echo "sin contenedor" > logs-verificacion.txt
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-verificacion
+          path: logs-verificacion.txt
+      - name: Resumen de la verificación
+        if: always()
+        run: |
+          {
+            echo "### Verificación programada"
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Disparador | ${{ github.event_name }} |"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| Imagen | \`${IMAGEN:-sin imagen}\` |"
+            echo "| Resultado | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
