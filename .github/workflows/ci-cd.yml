@@ -5,6 +5,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   ci:
     name: CI
@@ -70,6 +72,9 @@ jobs:
     needs: empaquetar
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v7
       - name: Iniciar sesión en GHCR
@@ -79,14 +84,21 @@ jobs:
       - name: Desplegar contenedor
         env:
           IMAGEN: ${{ needs.empaquetar.outputs.imagen }}
-        run: docker run -d --name api -p 8080:8000 -e APP_ENV=staging "$IMAGEN"
+          APP_ENV: ${{ vars.APP_ENV || 'staging' }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: docker run -d --name api -p 8080:8000 -e APP_ENV -e API_TOKEN "$IMAGEN"
       - name: Smoke test
         run: bash scripts/smoke.sh http://localhost:8080
+      - name: Ver el arranque del contenedor
+        run: docker logs api
   produccion:
     name: Desplegar en producción
     needs: [empaquetar, staging]
     runs-on: ubuntu-latest
     environment: produccion
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v7
       - name: Iniciar sesión en GHCR
@@ -96,6 +108,10 @@ jobs:
       - name: Desplegar contenedor
         env:
           IMAGEN: ${{ needs.empaquetar.outputs.imagen }}
-        run: docker run -d --name api -p 8080:8000 -e APP_ENV=produccion "$IMAGEN"
+          APP_ENV: ${{ vars.APP_ENV || 'produccion' }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: docker run -d --name api -p 8080:8000 -e APP_ENV -e API_TOKEN "$IMAGEN"
       - name: Smoke test
         run: bash scripts/smoke.sh http://localhost:8080
+      - name: Ver el arranque del contenedor
+        run: docker logs api
