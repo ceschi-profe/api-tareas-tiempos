@@ -2,6 +2,7 @@
 
 No hay base de datos: las tareas viven mientras el proceso esté en marcha.
 """
+import os
 
 TITULO_MAXIMO = 120
 
