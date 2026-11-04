@@ -9,5 +9,3 @@ htmlcov/
 reportes/
 .env
 
-# Reportes de cobertura en formato JSON
-*.json
