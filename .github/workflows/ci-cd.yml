@@ -24,6 +24,8 @@ jobs:
         run: |
           python -m compileall -q app
           python -c "from app import create_app; create_app()"
+      - name: Lint
+        run: ruff check .
       - name: Pruebas
         run: bash scripts/pruebas.sh
       - name: Publicar reporte de pruebas
@@ -87,10 +89,42 @@ jobs:
           APP_ENV: ${{ vars.APP_ENV || 'staging' }}
           API_TOKEN: ${{ secrets.API_TOKEN }}
         run: docker run -d --name api -p 8080:8000 -e APP_ENV -e API_TOKEN "$IMAGEN"
+      - name: Esperar health check del contenedor
+        run: |
+          for intento in $(seq 1 30); do
+            estado=$(docker inspect -f '{{.State.Health.Status}}' api)
+            echo "intento $intento: $estado"
+            [ "$estado" = "healthy" ] && exit 0
+            sleep 2
+          done
+          exit 1
       - name: Smoke test
+        env:
+          VERSION_ESPERADA: ${{ github.sha }}
         run: bash scripts/smoke.sh http://localhost:8080
-      - name: Ver el arranque del contenedor
-        run: docker logs api
+      - name: Guardar logs del contenedor
+        if: always()
+        run: docker logs api > logs-staging.txt 2>&1 || echo "sin contenedor" > logs-staging.txt
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-staging
+          path: logs-staging.txt
+      - name: Resumen del despliegue
+        if: always()
+        env:
+          IMAGEN: ${{ needs.empaquetar.outputs.imagen }}
+        run: |
+          {
+            echo "### Despliegue en staging"
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Commit | \`$GITHUB_SHA\` |"
+            echo "| Imagen | \`$IMAGEN\` |"
+            echo "| Ejecución | $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID |"
+            echo "| Resultado del job | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
   produccion:
     name: Desplegar en producción
     needs: [empaquetar, staging]
@@ -112,6 +146,15 @@ jobs:
           API_TOKEN: ${{ secrets.API_TOKEN }}
         run: docker run -d --name api -p 8080:8000 -e APP_ENV -e API_TOKEN "$IMAGEN"
       - name: Smoke test
+        env:
+          VERSION_ESPERADA: ${{ github.sha }}
         run: bash scripts/smoke.sh http://localhost:8080
-      - name: Ver el arranque del contenedor
-        run: docker logs api
+      - name: Guardar logs del contenedor
+        if: always()
+        run: docker logs api > logs-produccion.txt 2>&1 || echo "sin contenedor" > logs-produccion.txt
+      - name: Publicar logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-produccion
+          path: logs-produccion.txt
