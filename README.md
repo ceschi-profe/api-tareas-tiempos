@@ -1,4 +1,4 @@
-# API de tareas (version B)
+# API de tareas (version A y B)
 
 Aplicación de laboratorio del curso SOFT-756 (Implementación de CI/CD y Prácticas DevOps). Es una
 API pequeña en Python (Flask) que guarda tareas en memoria. El código de la aplicación casi no
